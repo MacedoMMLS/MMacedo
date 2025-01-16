@@ -1,6 +1,0 @@
-{
-  "name": "Desktop Connect",
-  "description": "Allows you to use your phone as a remote control for the TIDAL Desktop client via TIDAL Connect.",
-  "author": "toonlink",
-  "main": "./index.js"
-}
