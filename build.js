@@ -3,7 +3,8 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-const nativeExternals = ["@neptune", "@plugin", "electron"]
+// Add "fs" and "path" to the external modules list
+const nativeExternals = ["@neptune", "@plugin", "electron", "fs", "path"];
 
 const plugins = fs.readdirSync("./plugins");
 for (const plugin of plugins) {
@@ -17,38 +18,57 @@ for (const plugin of plugins) {
 
   esbuild
     .build({
+      loader: { ".ts": "ts" }, // Support TypeScript
       entryPoints: [
         "./" + path.join(pluginPath, pluginManifest.main ?? "index.js"),
       ],
       plugins: [
         {
+          name: "resolve-alias",
+          setup(build) {
+            const libPath = path.resolve("_lib");
+            build.onResolve({ filter: /^@inrixia\/lib\// }, (args) => {
+              let resolvedPath = path.join(libPath, args.path.replace("@inrixia/lib/", ""));
+              if (!fs.existsSync(resolvedPath)) {
+                if (fs.existsSync(resolvedPath + ".ts")) {
+                  resolvedPath += ".ts";
+                } else if (fs.existsSync(resolvedPath + ".js")) {
+                  resolvedPath += ".js";
+                } else {
+                  console.error("File not found:", resolvedPath);
+                }
+              }
+              return { path: resolvedPath };
+            });
+          },
+        },
+        {
           name: "neptuneNativeImports",
           setup(build) {
             build.onLoad(
-              { filter: /.*[\/\\].+\.native\.[a-z]+/g },
+              { filter: /.*[\\/].+\\.native\\.[a-z]+/g },
               async (args) => {
                 const result = await esbuild.build({
                   entryPoints: [args.path],
                   bundle: true,
                   minify: true,
-                  platform: "node",
+                  platform: "node", // Ensure node platform for native imports
                   format: "iife",
                   globalName: "neptuneExports",
                   write: false,
-                  external: nativeExternals
+                  external: nativeExternals, // Mark native modules as external
                 });
 
                 const outputCode = result.outputFiles[0].text;
 
-                // HATE! WHY WHY WHY WHY WHY (globalName breaks metafile. crying emoji)
                 const { metafile } = await esbuild.build({
                   entryPoints: [args.path],
-                  platform: "node",
+                  platform: "node", // Ensure node platform for metadata extraction
                   write: false,
                   metafile: true,
-                  bundle: true, // I find it annoying that I have to enable bundling.
-                  format: "esm", // This avoids exports not being properly defined, thus you do not need to change log levels.
-                  external: nativeExternals,
+                  bundle: true,
+                  format: "esm",
+                  external: nativeExternals, // Mark native modules as external
                 });
 
                 const builtExports = Object.values(metafile.outputs)[0].exports;
@@ -77,16 +97,12 @@ for (const plugin of plugins) {
       bundle: true,
       minify: true,
       format: "esm",
-      external: [
-        "@neptune",
-        "@plugin",
-      ],
-      platform: "browser",
+      platform: "browser", // Browser platform for plugin code
+      external: nativeExternals, // Mark external modules
       outfile,
     })
     .then(() => {
       fs.createReadStream(outfile)
-        // It being md5 does not matter, this is for caching and not security
         .pipe(crypto.createHash("md5").setEncoding("hex"))
         .on("finish", function () {
           fs.writeFileSync(
@@ -101,5 +117,8 @@ for (const plugin of plugins) {
 
           console.log("Built " + pluginManifest.name + "!");
         });
+    })
+    .catch((err) => {
+      console.error("Build failed for", plugin, ":", err);
     });
 }
