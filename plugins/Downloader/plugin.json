@@ -1,9 +1,1 @@
-{
-	"displayName": "Music Downloader",
-	"description": "Hires",
-	"author": "Macedo",
-	"main": "./src/index.js",
-	"dependencies": {
-		"@inrixia/lib/*": ["_lib/*"]
-	}
-}
+{"description":"Hires","author":"Macedo","hash":"583b381f28bc1467d253bd027d52a840"}
